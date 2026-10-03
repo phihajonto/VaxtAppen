@@ -1,7 +1,7 @@
 // Växtvakten service worker: visar pushnotiser och gör att appen startar utan nät.
 // Byt versionen här och i index.html (?v=…) när appen ändras.
-const CACHE = "vaxtvakten-v5";
-const SHELL = ["./", "index.html", "styles.css?v=5", "app.js?v=5", "config.js?v=5", "manifest.webmanifest", "icons/icon-192.png"];
+const CACHE = "vaxtvakten-v6";
+const SHELL = ["./", "index.html", "styles.css?v=6", "app.js?v=6", "config.js?v=6", "manifest.webmanifest", "icons/icon-192.png"];
 
 self.addEventListener("install", e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL)).then(() => self.skipWaiting()));
