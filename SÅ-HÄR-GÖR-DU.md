@@ -22,8 +22,16 @@ Mappar i paketet:
 ### 2. Skapa tabellerna och lägg in dina växter
 1. Klicka **SQL Editor** i vänstermenyn och sedan **New query**.
 2. Öppna filen `supabase/1-databas.sql`, kopiera allt och klistra in.
-3. Leta upp `BYT-MIG` (steg 5 i filen) och byt ut det mot din **PIN-kod**. Använd minst 6 tecken, gärna både bokstäver och siffror. Det är den koden du och dina kompisar skriver in i appen.
+3. Leta upp `BYT-MIG` (steg 5 i filen) och byt ut det mot din **PIN-kod**. Använd minst 6 tecken, gärna både bokstäver och siffror. Det blir koden till ert hushåll.
 4. Klicka **Run**. Det ska stå *Success*.
+
+### 2b. Slå på hushåll
+1. Öppna **SQL Editor → New query** igen.
+2. Klistra in allt från `supabase/3-hushall.sql` och klicka **Run**.
+
+Nu kan varje hushåll ha en egen kod och egna växter. Växterna från steg 2 hamnar i ert hushåll, och PIN-koden blir ert hushålls kod.
+
+> Kör inte `1-databas.sql` igen efter det här steget.
 
 ### 3. Skapa påminnelsefunktionen
 1. Klicka **Edge Functions** i vänstermenyn.
@@ -56,9 +64,9 @@ Båda är publika och får synas i appen. Skicka dem till Claude, så fyller Cla
 
 Appen publiceras automatiskt från mappen `site/` varje gång något ändras på `main`. Du behöver inte göra något.
 
-Adressen är **https://phihajonto.github.io/VaxtAppen/**. Den som använder appen behöver inget konto – bara adressen och PIN-koden.
+Adressen är **https://phihajonto.github.io/VaxtAppen/**. Den som använder appen behöver inget konto – bara adressen och sitt hushålls kod.
 
-Öppna adressen och skriv in din PIN-kod. Nu ska alla växterna synas.
+Öppna adressen och skriv in er kod. Nu ska alla växterna synas.
 
 > Vill du ändå använda Netlify fungerar `netlify.toml` fortfarande, men det behövs inte.
 
@@ -79,11 +87,11 @@ Nu körs påminnelsen kl. 08 på sommaren och kl. 07 på vintern. En notis skick
 **iPhone** (kräver iOS 16.4 eller senare):
 1. Öppna appens adress i **Safari**.
 2. Tryck på dela-knappen och välj **Lägg till på hemskärmen**.
-3. Öppna Växtvakten från hemskärmen och skriv in PIN-koden.
+3. Öppna Växtvakten från hemskärmen och skriv in hushållets kod.
 4. Tryck **Påminnelser → Slå på notiser** och tillåt notiser.
 
 **Android:**
-1. Öppna adressen i Chrome och skriv in PIN-koden.
+1. Öppna adressen i Chrome och skriv in hushållets kod.
 2. Välj gärna **Installera app** i menyn.
 3. Tryck **Påminnelser → Slå på notiser** och tillåt notiser.
 
@@ -95,17 +103,17 @@ Om någon växt behöver vatten får alla som slagit på notiser en notis inom n
 
 ---
 
-## Dela med kompisar
+## Hushåll och koder
 
-Skicka **adressen och PIN-koden**. Kompisarna behöver inget konto. De kan se växterna, trycka *Vattnat* och slå på egna notiser.
+Varje hushåll har en egen kod och en egen lista med växter. Påminnelserna gäller bara det egna hushållets växter.
 
-**Byta PIN-kod:** Kör den här raden i Supabase → SQL Editor:
+**Bjuda in någon ni bor med:** Tryck **Hushåll → Dela kod** i appen. Det skickar en länk som fyller i koden automatiskt. Alla med koden ser samma växter och kan vattna, ändra och ta bort dem.
 
-```sql
-update app_config set value = extensions.crypt('NY-KOD', extensions.gen_salt('bf')) where key = 'pin_hash';
-```
+**Kompisar som vill ha egna växter:** Skicka bara adressen, inte er kod. De trycker **Skapa ett eget hushåll** på startsidan och får en egen kod.
 
-Alla som har den gamla koden får då skriva in den nya.
+**Byta kod:** Tryck **Hushåll → Byt kod**. Den gamla koden slutar fungera direkt, och alla i hushållet behöver skriva in den nya. Gör det gärna en gång om ni har använt en enkel PIN-kod, eftersom appens egna koder är mycket svårare att gissa.
+
+**Byta hushåll på en telefon:** Tryck **Hushåll → Logga ut**. Telefonens notiser stängs av för det gamla hushållet. Slå på dem igen efter att du har skrivit in den nya koden.
 
 ---
 
@@ -114,6 +122,7 @@ Alla som har den gamla koden får då skriva in den nya.
 | Problem | Lösning |
 |---|---|
 | Appen säger "Appen är inte inställd än" | `config.js` har inte fått adressen och nyckeln. Gör Del 1 steg 5 och spara ändringen på GitHub. |
-| "Fel PIN-kod" fast koden är rätt | Kontrollera att du bytte ut `BYT-MIG` innan du körde `1-databas.sql`. Byt annars PIN-koden enligt ovan. |
+| "Den koden finns inte" fast koden är rätt | Har någon bytt kod under **Hushåll → Byt kod**? Fråga efter den nya. För det första hushållet: kontrollera att du bytte ut `BYT-MIG` innan du körde `1-databas.sql`. |
+| "Det går inte att skapa hushåll än" | Kör `supabase/3-hushall.sql` enligt Del 1 steg 2b. |
 | Ingen notis kommer | Kontrollera de tre nycklarna i Secrets och att notiser är tillåtna på telefonen. På iPhone måste appen öppnas från hemskärmen. |
 | Påminnelsen körs inte på morgonen | Kontrollera i Supabase under **Integrations → Cron** att jobbet `vaxtvakten-paminnelse` finns. |

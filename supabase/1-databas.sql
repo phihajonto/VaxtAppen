@@ -1,6 +1,7 @@
 -- Växtvakten: databas för Supabase.
 -- Kör hela filen en gång i Supabase → SQL Editor → New query → Run.
 -- ÄNDRA PIN-KODEN i steg 5 innan du kör.
+-- Kör sedan 3-hushall.sql. Kör inte den här filen igen efter det.
 
 -- 1. Tillägg
 create extension if not exists pgcrypto with schema extensions;

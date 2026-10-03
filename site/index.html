@@ -21,14 +21,38 @@
 <body>
 
 <div class="lock" id="lock" hidden>
-  <form class="lock-card" id="pinForm">
+  <div class="lock-card">
     <h1>Växtvakten</h1>
-    <p>Skriv in PIN-koden för att se och vattna växterna.</p>
-    <label for="pinInput" class="sr-only" style="position:absolute;left:-9999px">PIN-kod</label>
-    <input id="pinInput" type="password" inputmode="text" autocomplete="current-password" required placeholder="PIN-kod">
-    <button class="btn primary" type="submit">Öppna</button>
-    <div class="err" id="pinErr" role="alert"></div>
-  </form>
+
+    <form id="pinForm">
+      <p id="pinIntro">Skriv in ert hushålls kod för att se och vattna era växter.</p>
+      <label for="pinInput" class="sr-only">Hushållets kod</label>
+      <input id="pinInput" type="password" autocapitalize="characters" autocomplete="current-password" spellcheck="false" required placeholder="Kod" aria-describedby="pinErr">
+      <button class="btn primary" type="submit">Öppna</button>
+      <div class="err" id="pinErr" role="alert"></div>
+    </form>
+
+    <div class="lock-alt" id="createToggle">
+      <p>Nytt här?</p>
+      <button class="btn" type="button" data-action="show-create">Skapa ett eget hushåll</button>
+    </div>
+
+    <form id="createForm" hidden>
+      <h2 id="createTitle">Nytt hushåll</h2>
+      <p>Ni får en egen kod och en egen lista med växter. Dela koden med dem ni bor med.</p>
+      <label for="createName">Namn på hushållet</label>
+      <input id="createName" name="name" type="text" maxlength="60" required autocomplete="off" placeholder="t.ex. Lägenheten på Storgatan" aria-describedby="createErr">
+      <div class="row"><button class="btn" type="button" data-action="hide-create">Avbryt</button><button class="btn primary" type="submit">Skapa hushåll</button></div>
+      <div class="err" id="createErr" role="alert"></div>
+    </form>
+
+    <div id="createdPanel" hidden>
+      <h2 id="createdTitle" tabindex="-1">Ert hushåll är skapat</h2>
+      <p>Det här är er kod. Spara den och dela den med dem ni bor med – den behövs för att komma in.</p>
+      <p class="code-box" id="createdCode"></p>
+      <div class="row"><button class="btn" type="button" data-action="share-code">Dela kod</button><button class="btn primary" type="button" data-action="enter-created">Fortsätt</button></div>
+    </div>
+  </div>
 </div>
 
 <div class="wrap" id="app" hidden>
@@ -36,8 +60,10 @@
     <div>
       <div class="date" id="today"></div>
       <h1>Växtvakten</h1>
+      <div class="household-name" id="householdName" hidden></div>
     </div>
     <div class="head-actions">
+      <button class="btn" id="householdBtn" type="button">Hushåll</button>
       <button class="btn" id="remindBtn" type="button">Påminnelser</button>
       <button class="btn primary" id="addBtn" type="button">+ Lägg till växt</button>
     </div>
