@@ -1,3 +1,5 @@
+# Publicerar mappen site/ på GitHub Pages vid varje ändring på main.
+# Appen hamnar på https://phihajonto.github.io/VaxtAppen/ – ingen inloggning krävs för att använda den.
 name: Publicera på GitHub Pages
 
 on:
@@ -22,11 +24,11 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
-      - name: Samla webbfiler
-        run: |
-          mkdir _site
-          cp index.html styles.css app.js plant-library.js sw.js manifest.webmanifest icon.svg _site/
       - uses: actions/configure-pages@v5
+        with:
+          enablement: true
       - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
       - id: deployment
         uses: actions/deploy-pages@v4

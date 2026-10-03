@@ -1,0 +1,4 @@
+# Hemliga nycklar ska aldrig in i repot
+supabase/HEMLIGA-NYCKLAR.txt
+.DS_Store
+kopiera-in/
