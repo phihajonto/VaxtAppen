@@ -97,10 +97,27 @@
   async function waterPlant(id) {
     const p = state.plants.find(x => x.id === id); if (!p) return;
     try {
+      const before = { lastWatered: p.lastWatered || null, history: [...(p.history || [])] };
       const row = await rpc("water_plant", { p_id: id });
       const np = replacePlant(row);
-      toast(`${np.name} vattnad. Nästa gång ${fmtLong(schedule(np).due)}.`);
+      toast(`${np.name} vattnad. Nästa gång ${fmtLong(schedule(np).due)}.`, {
+        label: "Ångra",
+        run: () => restoreWatering(id, before, `Vattningen av ${np.name} är ångrad.`),
+      });
     } catch (e) { toast(errText(e)); }
+  }
+  // Puts back an earlier watering state, e.g. after an accidental tap.
+  async function restoreWatering(id, prev, doneMsg) {
+    const p = state.plants.find(x => x.id === id); if (!p) return;
+    try {
+      replacePlant(await rpc("save_plant", { p: toRow({ ...p, lastWatered: prev.lastWatered, history: prev.history }) }));
+      toast(doneMsg);
+    } catch (e) { toast(errText(e)); }
+  }
+  function undoLatest(id) {
+    const p = state.plants.find(x => x.id === id); if (!p) return;
+    const history = (p.history || []).slice(1);
+    return restoreWatering(id, { lastWatered: history[0] || null, history }, `Senaste vattningen av ${p.name} är borttagen.`);
   }
   function errText(e) {
     if (e?.code === "wrong_pin") { lock("PIN-koden stämmer inte längre. Skriv in den nya."); return "Fel PIN-kod."; }
@@ -174,7 +191,8 @@
         <div class="care"><span class="pill ${l.cls}">${l.text}</span>${p.light ? `<span class="pill example">Ljus: ${esc(p.light)}</span>` : ""}</div>
         <button class="btn water water-big" type="button" data-water="${esc(p.id)}">Vattnat</button>
         ${p.description ? `<p class="desc">${esc(p.description)}</p>` : `<p class="desc" style="color:var(--muted)">Ingen beskrivning än.</p>`}
-        ${hist.length ? `<div><div class="section-label">Vattnad</div><div class="history">${hist.map(h => `<span>${fmt(h, { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}</span>`).join("")}</div></div>` : ""}
+        ${hist.length ? `<div><div class="section-label">Vattnad</div><div class="history">${hist.map(h => `<span>${fmt(h, { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}</span>`).join("")}</div>
+          <button class="btn ghost" type="button" data-action="undo-latest" style="margin-top:10px">Ta bort senaste vattningen</button></div>` : ""}
         ${state.confirmDelete ? `<div class="confirm"><div>Ta bort ${esc(p.name)} för gott?</div><div class="row"><button class="btn" type="button" data-action="cancel-delete">Avbryt</button><button class="btn danger" type="button" data-action="do-delete">Ta bort</button></div></div>`
           : `<div class="row"><button class="btn danger ghost" type="button" data-action="ask-delete">Ta bort</button><button class="btn" type="button" data-action="edit">Redigera</button></div>`}`;
     } else if (state.mode === "add" || state.mode === "edit") {
@@ -208,9 +226,11 @@
   function openSheet(mode, id) { state.mode = mode; state.openId = id || null; state.confirmDelete = false; renderSheet(); const f = document.querySelector("#sheetRoot input:not([type=file]), #sheetRoot .water-big"); f && f.focus({ preventScroll: true }); }
   function closeSheet() { state.mode = null; state.openId = null; state.confirmDelete = false; $("#sheetRoot").innerHTML = ""; }
 
-  function toast(msg) {
-    const r = $("#toastRoot"); r.innerHTML = `<div class="toast" role="status">${esc(msg)}</div>`;
-    clearTimeout(toast.t); toast.t = setTimeout(() => (r.innerHTML = ""), 3200);
+  function toast(msg, action) {
+    const r = $("#toastRoot");
+    r.innerHTML = `<div class="toast" role="status"><span>${esc(msg)}</span>${action ? `<button type="button" class="toast-action">${esc(action.label)}</button>` : ""}</div>`;
+    if (action) r.querySelector(".toast-action").addEventListener("click", () => { r.innerHTML = ""; clearTimeout(toast.t); action.run(); });
+    clearTimeout(toast.t); toast.t = setTimeout(() => (r.innerHTML = ""), action ? 8000 : 3200);
   }
 
   /* ---------- events ---------- */
@@ -224,6 +244,7 @@
       if (act === "close" || act === "scrim") closeSheet();
       else if (act === "add") openSheet("add");
       else if (act === "edit") openSheet("edit", state.openId);
+      else if (act === "undo-latest") { a.disabled = true; await undoLatest(state.openId); }
       else if (act === "ask-delete") { state.confirmDelete = true; renderSheet(); }
       else if (act === "cancel-delete") { state.confirmDelete = false; renderSheet(); }
       else if (act === "do-delete") {
