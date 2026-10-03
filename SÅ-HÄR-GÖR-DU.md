@@ -4,7 +4,7 @@ Det tar ungefär 20 minuter. Båda tjänsterna är gratis. Gör det på en dator
 
 Mappar i paketet:
 
-- `site/` är själva webbappen som ska upp på Netlify.
+- `site/` är själva webbappen. Den publiceras automatiskt på GitHub Pages.
 - `supabase/` innehåller databasen, påminnelsefunktionen och de hemliga nycklarna.
 
 ---
@@ -52,24 +52,15 @@ Båda är publika och får synas i appen. Skicka dem till Claude, så fyller Cla
 
 ---
 
-## Del 2: Webbappen (Netlify)
+## Del 2: Webbappen (GitHub Pages)
 
-**Med GitHub (rekommenderas):**
-1. Logga in på **app.netlify.com**.
-2. Välj **Add new project → Import an existing project → GitHub** och välj repot `VaxtAppen`.
-3. Netlify hittar inställningarna i `netlify.toml` själv, så du behöver inte ändra något. Klicka **Deploy**.
+Appen publiceras automatiskt från mappen `site/` varje gång något ändras på `main`. Du behöver inte göra något.
 
-Varje gång koden ändras på GitHub publiceras den nya versionen automatiskt.
+Adressen är **https://phihajonto.github.io/VaxtAppen/**. Den som använder appen behöver inget konto – bara adressen och PIN-koden.
 
-**Utan GitHub:**
-1. Gå till **app.netlify.com/drop**.
-2. Dra hela mappen **`site`** till rutan på sidan.
-3. Skapa ett gratis konto när Netlify ber om det. Annars försvinner sidan efter en timme.
-4. Byt namn på sidan under **Site configuration → Change site name**, till exempel `vaxtvakten-philip`. Adressen blir då **https://vaxtvakten-philip.netlify.app**.
+Öppna adressen och skriv in din PIN-kod. Nu ska alla växterna synas.
 
-Öppna adressen och skriv in din PIN-kod. Nu ska alla tio växterna synas.
-
-> Ändrar du något i `site/` senare drar du in mappen igen under **Deploys** på Netlify.
+> Vill du ändå använda Netlify fungerar `netlify.toml` fortfarande, men det behövs inte.
 
 ---
 
@@ -122,7 +113,7 @@ Alla som har den gamla koden får då skriva in den nya.
 
 | Problem | Lösning |
 |---|---|
-| Appen säger "Appen är inte inställd än" | `config.js` har inte fått adressen och nyckeln. Gör Del 1 steg 5 och dra upp `site` igen. |
+| Appen säger "Appen är inte inställd än" | `config.js` har inte fått adressen och nyckeln. Gör Del 1 steg 5 och spara ändringen på GitHub. |
 | "Fel PIN-kod" fast koden är rätt | Kontrollera att du bytte ut `BYT-MIG` innan du körde `1-databas.sql`. Byt annars PIN-koden enligt ovan. |
 | Ingen notis kommer | Kontrollera de tre nycklarna i Secrets och att notiser är tillåtna på telefonen. På iPhone måste appen öppnas från hemskärmen. |
 | Påminnelsen körs inte på morgonen | Kontrollera i Supabase under **Integrations → Cron** att jobbet `vaxtvakten-paminnelse` finns. |

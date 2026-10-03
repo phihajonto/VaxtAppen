@@ -2,7 +2,7 @@
 
 Webbapp som håller koll på när varje krukväxt ska vattnas, med pushnotiser varje morgon.
 
-- `site/` – själva appen (HTML, CSS, JS, service worker). Publiceras av Netlify.
+- `site/` – själva appen (HTML, CSS, JS, service worker). Publiceras automatiskt på GitHub Pages: **https://phihajonto.github.io/VaxtAppen/**
 - `supabase/1-databas.sql` – tabeller, PIN-skyddade funktioner och växterna.
 - `supabase/2-paminnelse-varje-morgon.sql` – schemalagt jobb som kör påminnelsen.
 - `supabase/functions/send-reminders/` – Edge Function som skickar pushnotiser.
