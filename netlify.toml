@@ -1,0 +1,8 @@
+# Netlify publicerar mappen site/ vid varje ändring i repot.
+[build]
+  publish = "site"
+
+[[headers]]
+  for = "/sw.js"
+  [headers.values]
+    Cache-Control = "no-cache"
