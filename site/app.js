@@ -2,7 +2,7 @@
   const CFG = window.VAXTVAKTEN_CONFIG || {};
   const DAY = 86400000;
   const PIN_KEY = "vaxtvakten.pin";
-  const state = { plants: [], openId: null, mode: null, confirmDelete: false, confirmNewCode: false, ready: false, offline: false, household: null };
+  const state = { plants: [], openId: null, mode: null, confirmDelete: false, confirmNewCode: false, editDate: false, ready: false, offline: false, household: null };
   let pin = "";
 
   const $ = s => document.querySelector(s);
@@ -156,6 +156,29 @@
     const history = (p.history || []).slice(1);
     return restoreWatering(id, { lastWatered: history[0] || null, history }, `Senaste vattningen av ${p.name} är borttagen.`);
   }
+  const dayKey = d => new Date(d).toLocaleDateString("sv-SE");
+  // Sets the latest watering to a chosen day. A later day than the last recorded watering counts as
+  // a watering someone forgot to tap; an earlier or the same day corrects the last one.
+  function historyWithDate(history, iso) {
+    const h = [...(history || [])];
+    if (h.length && dayKey(iso) <= dayKey(h[0])) h[0] = iso; else h.unshift(iso);
+    return h.sort((a, b) => new Date(b) - new Date(a)).slice(0, 12);
+  }
+  async function setLastWatered(id, dateStr) {
+    const p = state.plants.find(x => x.id === id); if (!p) return;
+    const before = { lastWatered: p.lastWatered || null, history: [...(p.history || [])] };
+    const iso = new Date(dateStr + "T12:00:00").toISOString();
+    try {
+      const np = replacePlant(await rpc("save_plant", { p: toRow({ ...p, lastWatered: iso, history: historyWithDate(p.history, iso) }) }));
+      state.editDate = false; renderSheet();
+      $("#sheetRoot [data-action=edit-date]")?.focus();
+      toast(`Senast vattnad ${fmt(iso, { day: "numeric", month: "long" })}. Nästa gång ${fmtLong(schedule(np).due)}.`, {
+        label: "Ångra",
+        run: () => restoreWatering(id, before, "Datumet är återställt."),
+      });
+    } catch (e) { toast(errText(e)); }
+  }
+
   function errText(e) {
     if (e?.code === "wrong_pin") { lock(WRONG_CODE_LATER); return "Fel kod."; }
     if (e?.code === "offline") return "Ingen anslutning. Försök igen när du är online.";
@@ -204,7 +227,8 @@
     }
     document.title = due.length ? `(${due.length}) Växtvakten` : "Växtvakten";
     if ("setAppBadge" in navigator) { try { due.length ? navigator.setAppBadge(due.length) : navigator.clearAppBadge(); } catch {} }
-    if (state.mode === "view") renderSheet();
+    // Don't redraw while the date field is open, or the periodic refresh would wipe what was typed.
+    if (state.mode === "view" && !state.editDate) renderSheet();
   }
 
   function renderSheet() {
@@ -227,6 +251,13 @@
         </div>
         <div class="care"><span class="pill ${l.cls}">${l.text}</span>${p.light ? `<span class="pill example">Ljus: ${esc(p.light)}</span>` : ""}</div>
         <button class="btn water water-big" type="button" data-water="${esc(p.id)}">Vattnat</button>
+        ${state.editDate
+          ? `<form id="dateForm" class="date-form">
+              <label for="f-date">Senast vattnad<input id="f-date" name="date" type="date" required max="${dayKey(new Date())}" value="${dayKey(p.lastWatered || new Date())}"></label>
+              <p class="hint">Glömde du trycka på Vattnat? Välj dagen du vattnade.</p>
+              <div class="row"><button class="btn" type="button" data-action="cancel-date">Avbryt</button><button class="btn primary" type="submit">Spara datum</button></div>
+            </form>`
+          : `<button class="btn ghost" type="button" data-action="edit-date">Ändra datum för senaste vattning</button>`}
         ${p.description ? `<p class="desc">${esc(p.description)}</p>` : `<p class="desc" style="color:var(--muted)">Ingen beskrivning än.</p>`}
         ${hist.length ? `<div><div class="section-label">Vattnad</div><div class="history">${hist.map(h => `<span>${fmt(h, { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}</span>`).join("")}</div>
           <button class="btn ghost" type="button" data-action="undo-latest" style="margin-top:10px">Ta bort senaste vattningen</button></div>` : ""}
@@ -247,7 +278,7 @@
                 ${["", "Soligt", "Ljust, ej direkt sol", "Halvskugga", "Skugga"].map(o => `<option value="${o}" ${o === (p.light || "") ? "selected" : ""}>${o || "—"}</option>`).join("")}
               </select></label>
           </div>
-          <label for="f-last">Senast vattnad<input id="f-last" name="lastWatered" type="date" value="${p.lastWatered ? new Date(p.lastWatered).toLocaleDateString("sv-SE") : (state.mode === "add" ? new Date().toLocaleDateString("sv-SE") : "")}"></label>
+          <label for="f-last">Senast vattnad<input id="f-last" name="lastWatered" type="date" max="${dayKey(new Date())}" value="${p.lastWatered ? new Date(p.lastWatered).toLocaleDateString("sv-SE") : (state.mode === "add" ? new Date().toLocaleDateString("sv-SE") : "")}"></label>
           <div class="pick"><div class="thumb" id="f-preview">${p.imageUrl ? `<img src="${esc(p.imageUrl)}" alt="">` : "+"}</div>
             <label for="f-image">Bild <span class="hint">(valfritt)</span><input id="f-image" name="image" type="file" accept="image/*"></label></div>
           <label for="f-desc">Beskrivning<textarea id="f-desc" name="description" maxlength="2000" placeholder="Var den står, skötselråd, gödsling …">${esc(p.description)}</textarea></label>
@@ -262,10 +293,10 @@
     if (state.mode === "remind") bindRemind();
   }
 
-  function openSheet(mode, id) { state.mode = mode; state.openId = id || null; state.confirmDelete = false; state.confirmNewCode = false; renderSheet(); const f = document.querySelector("#sheetRoot input:not([type=file]), #sheetRoot .water-big"); f && f.focus({ preventScroll: true }); }
+  function openSheet(mode, id) { state.mode = mode; state.openId = id || null; state.confirmDelete = false; state.confirmNewCode = false; state.editDate = false; renderSheet(); const f = document.querySelector("#sheetRoot input:not([type=file]), #sheetRoot .water-big"); f && f.focus({ preventScroll: true }); }
   function closeSheet() {
     const reopen = state.mode && state.mode !== "view" ? (state.mode === "household" ? $("#householdBtn") : state.mode === "remind" ? $("#remindBtn") : null) : null;
-    state.mode = null; state.openId = null; state.confirmDelete = false; state.confirmNewCode = false; $("#sheetRoot").innerHTML = "";
+    state.mode = null; state.openId = null; state.confirmDelete = false; state.confirmNewCode = false; state.editDate = false; $("#sheetRoot").innerHTML = "";
     if (reopen && !$("#app").hidden) reopen.focus({ preventScroll: true });
   }
 
@@ -286,6 +317,8 @@
       if (act === "scrim" && e.target !== a) return;
       if (act === "close" || act === "scrim") closeSheet();
       else if (act === "add") openSheet("add");
+      else if (act === "edit-date") { state.editDate = true; renderSheet(); $("#f-date")?.focus(); }
+      else if (act === "cancel-date") { state.editDate = false; renderSheet(); $("#sheetRoot [data-action=edit-date]")?.focus(); }
       else if (act === "show-create") showLockView("create");
       else if (act === "hide-create") showLockView("join");
       else if (act === "enter-created") enterCreated();
@@ -322,6 +355,13 @@
   });
   document.addEventListener("submit", async e => {
     if (e.target.id === "renameForm") return renameHousehold(e);
+    if (e.target.id === "dateForm") {
+      e.preventDefault();
+      const d = new FormData(e.target).get("date");
+      if (!d || d > dayKey(new Date())) { toast("Välj ett datum som inte ligger i framtiden."); return; }
+      e.target.querySelector('[type="submit"]').disabled = true;
+      return setLastWatered(state.openId, d);
+    }
     if (e.target.id !== "plantForm") return;
     e.preventDefault();
     const f = new FormData(e.target);
@@ -340,7 +380,7 @@
       light: String(f.get("light") || ""),
       description: String(f.get("description") || "").trim(),
       lastWatered,
-      history: existing?.history?.length ? existing.history : (lastWatered ? [lastWatered] : []),
+      history: !lastWatered ? [] : lastWatered === existing?.lastWatered ? existing.history || [] : historyWithDate(existing?.history, lastWatered),
     };
     const btn = e.target.querySelector('[type="submit"]');
     btn.disabled = true;

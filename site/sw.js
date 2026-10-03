@@ -1,6 +1,7 @@
 // Växtvakten service worker: visar pushnotiser och gör att appen startar utan nät.
-const CACHE = "vaxtvakten-v4";
-const SHELL = ["./", "index.html", "styles.css", "app.js", "config.js", "manifest.webmanifest", "icons/icon-192.png"];
+// Byt versionen här och i index.html (?v=…) när appen ändras.
+const CACHE = "vaxtvakten-v6";
+const SHELL = ["./", "index.html", "styles.css?v=6", "app.js?v=6", "config.js?v=6", "manifest.webmanifest", "icons/icon-192.png"];
 
 self.addEventListener("install", e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL)).then(() => self.skipWaiting()));
@@ -13,7 +14,9 @@ self.addEventListener("fetch", e => {
   const url = new URL(e.request.url);
   if (e.request.method !== "GET" || url.origin !== self.location.origin) return;
   e.respondWith(
-    fetch(e.request).then(res => {
+    // "no-cache" asks the server whether the file changed instead of using the browser's copy,
+    // so a new index.html is never paired with an old app.js.
+    fetch(e.request.mode === "navigate" ? e.request.url : e.request, { cache: "no-cache" }).then(res => {
       if (res.ok) { const copy = res.clone(); caches.open(CACHE).then(c => c.put(e.request, copy)); }
       return res;
     }).catch(() => caches.match(e.request).then(r => r || caches.match("index.html")))

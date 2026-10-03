@@ -8,7 +8,7 @@
   --leaf: #2f5d3a;
   --water: #1f6f9e;
   --water-soft: #dcecf5;
-  --due: #b2551b;
+  --due: #a34c16;
   --due-soft: #f8e6d6;
   --ok-soft: #e1ecdc;
   --shadow: 0 1px 2px rgba(31,43,34,.06), 0 8px 24px rgba(31,43,34,.07);
@@ -146,3 +146,5 @@ img { max-width: 100%; }
 .sheet form { display: grid; gap: 10px; }
 button.card-name { display: block; width: 100%; text-align: left; background: none; border: 0; padding: 0; color: inherit; font-family: inherit; line-height: inherit; cursor: pointer; }
 .card:has(button.card-name:focus-visible) { outline: 2px solid var(--leaf); outline-offset: 2px; }
+.date-form { display: grid; gap: 10px; padding: 12px; border: 1px dashed var(--line); border-radius: 12px; }
+.date-form .hint { margin: 0; font-size: 13px; color: var(--muted); }
