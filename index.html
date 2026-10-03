@@ -1,0 +1,225 @@
+<!doctype html>
+<html lang="sv">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>VäxtAppen</title>
+  <meta name="description" content="Håll koll på när dina växter behöver vatten och gödning. Fungerar offline, kräver inget konto.">
+  <meta name="theme-color" content="#2f6b3a">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="styles.css">
+  <script src="plant-library.js" defer></script>
+  <script src="app.js" defer></script>
+</head>
+<body>
+  <a class="skip-link" href="#main">Hoppa till innehållet</a>
+
+  <header class="site-header">
+    <div class="wrap header-inner">
+      <h1><span aria-hidden="true">🌱</span> VäxtAppen</h1>
+      <nav aria-label="Huvudmeny">
+        <ul class="tabs" role="list">
+          <li><a href="#mina-vaxter" data-view="mina-vaxter" aria-current="page">Mina växter</a></li>
+          <li><a href="#lagg-till" data-view="lagg-till">Lägg till</a></li>
+          <li><a href="#vaxtguide" data-view="vaxtguide">Växtguide</a></li>
+          <li><a href="#installningar" data-view="installningar">Inställningar</a></li>
+        </ul>
+      </nav>
+    </div>
+  </header>
+
+  <!-- Statusmeddelanden läses upp av skärmläsare -->
+  <div id="announcer" class="visually-hidden" role="status" aria-live="polite"></div>
+
+  <main id="main" class="wrap" tabindex="-1">
+
+    <!-- Mina växter -->
+    <section id="view-mina-vaxter" class="view" aria-labelledby="h-mina-vaxter">
+      <h2 id="h-mina-vaxter" tabindex="-1">Mina växter</h2>
+      <p id="summary" class="summary"></p>
+
+      <div class="toolbar">
+        <div class="field inline">
+          <label for="search">Sök</label>
+          <input id="search" type="search" autocomplete="off" placeholder="Namn, art eller plats">
+        </div>
+        <div class="field inline">
+          <label for="sort">Sortera</label>
+          <select id="sort">
+            <option value="due">Vattnas först</option>
+            <option value="name">Namn (A–Ö)</option>
+            <option value="location">Plats</option>
+          </select>
+        </div>
+      </div>
+
+      <ul id="plant-list" class="plant-list" role="list"></ul>
+
+      <div id="empty-state" class="empty" hidden>
+        <p>Du har inga växter ännu.</p>
+        <p><a class="button" href="#lagg-till" data-view="lagg-till">Lägg till din första växt</a></p>
+      </div>
+    </section>
+
+    <!-- Lägg till / redigera -->
+    <section id="view-lagg-till" class="view" aria-labelledby="h-form" hidden>
+      <h2 id="h-form" tabindex="-1">Lägg till växt</h2>
+      <p class="hint">Fält märkta med <abbr title="obligatoriskt">*</abbr> måste fyllas i.</p>
+
+      <div id="form-errors" class="error-summary" role="alert" tabindex="-1" hidden></div>
+
+      <form id="plant-form" novalidate>
+        <input type="hidden" id="plant-id">
+
+        <div class="field">
+          <label for="name">Namn <abbr title="obligatoriskt">*</abbr></label>
+          <input id="name" name="name" type="text" required autocomplete="off" aria-describedby="name-hint">
+          <p id="name-hint" class="hint">T.ex. ”Monstera i vardagsrummet”.</p>
+        </div>
+
+        <div class="field">
+          <label for="species">Art</label>
+          <input id="species" name="species" type="text" list="species-list" autocomplete="off" aria-describedby="species-hint">
+          <datalist id="species-list"></datalist>
+          <p id="species-hint" class="hint">Välj en art från växtguiden så fylls skötselråd i automatiskt.</p>
+        </div>
+
+        <div class="field">
+          <label for="location">Plats</label>
+          <input id="location" name="location" type="text" list="location-list" autocomplete="off">
+          <datalist id="location-list"></datalist>
+        </div>
+
+        <div class="grid-2">
+          <div class="field">
+            <label for="water-interval">Vattna var <abbr title="obligatoriskt">*</abbr></label>
+            <div class="with-unit">
+              <input id="water-interval" name="waterInterval" type="number" inputmode="numeric" min="1" max="365" required aria-describedby="water-unit">
+              <span id="water-unit">dag(ar)</span>
+            </div>
+          </div>
+          <div class="field">
+            <label for="last-watered">Senast vattnad</label>
+            <input id="last-watered" name="lastWatered" type="date">
+          </div>
+        </div>
+
+        <div class="grid-2">
+          <div class="field">
+            <label for="feed-interval">Gödsla var</label>
+            <div class="with-unit">
+              <input id="feed-interval" name="feedInterval" type="number" inputmode="numeric" min="0" max="365" aria-describedby="feed-unit feed-hint">
+              <span id="feed-unit">dag(ar)</span>
+            </div>
+            <p id="feed-hint" class="hint">Lämna tomt eller 0 för att inte påminnas.</p>
+          </div>
+          <div class="field">
+            <label for="last-fed">Senast gödslad</label>
+            <input id="last-fed" name="lastFed" type="date">
+          </div>
+        </div>
+
+        <div class="field">
+          <label for="light">Ljus</label>
+          <select id="light" name="light">
+            <option value="">Vet ej</option>
+            <option value="skugga">Skugga</option>
+            <option value="halvskugga">Halvskugga</option>
+            <option value="ljust">Ljust, ej direkt sol</option>
+            <option value="sol">Direkt sol</option>
+          </select>
+        </div>
+
+        <div class="field">
+          <label for="notes">Anteckningar</label>
+          <textarea id="notes" name="notes" rows="4"></textarea>
+        </div>
+
+        <div class="actions">
+          <button type="submit" class="button primary" id="submit-btn">Spara växt</button>
+          <button type="button" class="button" id="cancel-btn">Avbryt</button>
+        </div>
+      </form>
+    </section>
+
+    <!-- Växtguide -->
+    <section id="view-vaxtguide" class="view" aria-labelledby="h-guide" hidden>
+      <h2 id="h-guide" tabindex="-1">Växtguide</h2>
+      <p>Grundläggande skötselråd för vanliga krukväxter. Råden är ungefärliga – känn alltid i jorden innan du vattnar.</p>
+      <div class="field inline">
+        <label for="guide-search">Sök i guiden</label>
+        <input id="guide-search" type="search" autocomplete="off">
+      </div>
+      <ul id="guide-list" class="guide-list" role="list"></ul>
+    </section>
+
+    <!-- Inställningar -->
+    <section id="view-installningar" class="view" aria-labelledby="h-settings" hidden>
+      <h2 id="h-settings" tabindex="-1">Inställningar</h2>
+
+      <fieldset>
+        <legend>Utseende</legend>
+        <div class="radio-group">
+          <label><input type="radio" name="theme" value="auto"> Följ systemet</label>
+          <label><input type="radio" name="theme" value="light"> Ljust</label>
+          <label><input type="radio" name="theme" value="dark"> Mörkt</label>
+        </div>
+        <div class="field">
+          <label for="font-size">Textstorlek</label>
+          <select id="font-size">
+            <option value="100">Normal</option>
+            <option value="115">Stor</option>
+            <option value="130">Större</option>
+            <option value="150">Störst</option>
+          </select>
+        </div>
+      </fieldset>
+
+      <fieldset>
+        <legend>Påminnelser</legend>
+        <p class="hint">Visar en notis när du öppnar appen och någon växt behöver skötsel. Inget skickas till någon server.</p>
+        <button type="button" class="button" id="notify-btn">Aktivera notiser</button>
+        <p id="notify-status" class="hint"></p>
+      </fieldset>
+
+      <fieldset>
+        <legend>Säkerhetskopia</legend>
+        <p class="hint">Dina växter sparas bara i den här webbläsaren. Exportera en fil för att flytta dem till en annan enhet.</p>
+        <div class="actions">
+          <button type="button" class="button" id="export-btn">Exportera (JSON)</button>
+          <label class="button" for="import-file">Importera fil</label>
+          <input id="import-file" type="file" accept="application/json,.json" class="visually-hidden">
+        </div>
+      </fieldset>
+
+      <fieldset>
+        <legend>Rensa</legend>
+        <button type="button" class="button danger" id="clear-btn">Ta bort alla växter</button>
+      </fieldset>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="wrap">
+      <p>VäxtAppen fungerar helt i din webbläsare – även offline. Ingen inloggning, ingen spårning.</p>
+    </div>
+  </footer>
+
+  <!-- Bekräftelsedialog -->
+  <dialog id="confirm-dialog" aria-labelledby="confirm-title" aria-describedby="confirm-text">
+    <form method="dialog">
+      <h2 id="confirm-title">Är du säker?</h2>
+      <p id="confirm-text"></p>
+      <div class="actions">
+        <button value="cancel" class="button" autofocus>Avbryt</button>
+        <button value="ok" class="button danger" id="confirm-ok">Ta bort</button>
+      </div>
+    </form>
+  </dialog>
+
+  <noscript>
+    <p class="wrap">VäxtAppen behöver JavaScript för att spara och visa dina växter.</p>
+  </noscript>
+</body>
+</html>
