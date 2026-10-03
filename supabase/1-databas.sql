@@ -190,5 +190,10 @@ Kruka: 12 cm (från Blomsterlandet). Etiketten anger bara släktet Crassula.', '
 
 Tappar den blad har den oftast fått för mycket vatten eller drag från fönstret.
 
-Kruka: 13 cm (från Blomsterlandet).', 'Ljust, ej direkt sol', 7, 'img/schefflera.jpg')
+Kruka: 13 cm (från Blomsterlandet).', 'Ljust, ej direkt sol', 7, 'img/schefflera.jpg'),
+  ('kimbalafikus', 'Kimbalafikus', 'Ficus cyathistipula', 'Ficus med långa, blanka och läderartade blad längs en uppstammad stam. Vattna när översta 2–3 cm jord är torr och töm ytterkrukan efter en kvart. Den tål lite mindre ljus än många andra ficusar, men växer bäst ljust utan direkt sol.
+
+De bruna, torra fjällen vid bladfästena är stipler, skyddsblad runt nya skott, och de faller av naturligt. Torka av bladen ibland så de kan ta upp ljus.
+
+Kruka: 21 cm (från Blomsterlandet).', 'Ljust, ej direkt sol', 8, 'img/kimbalafikus.jpg')
 on conflict (id) do nothing;
