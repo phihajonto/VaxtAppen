@@ -50,11 +50,35 @@
     interval_days: p.intervalDays, last_watered: p.lastWatered || "", history: p.history || [], image_url: p.imageUrl || "",
   });
 
+  /* One-time additions, run from the app so nobody has to touch the database by hand.
+     Each runs once per device and only adds a plant that is missing. */
+  const ADDITIONS = [
+    { key: "kimbalafikus-2026-10", plant: {
+      id: "kimbalafikus", name: "Kimbalafikus", latin: "Ficus cyathistipula", intervalDays: 8, light: "Ljust, ej direkt sol",
+      imageUrl: "img/kimbalafikus.jpg", history: [], lastWatered: null,
+      description: "Ficus med långa, blanka och läderartade blad längs en uppstammad stam. Vattna när översta 2–3 cm jord är torr och töm ytterkrukan efter en kvart. Den tål lite mindre ljus än många andra ficusar, men växer bäst ljust utan direkt sol.\n\nDe bruna, torra fjällen vid bladfästena är stipler, skyddsblad runt nya skott, och de faller av naturligt. Torka av bladen ibland så de kan ta upp ljus.\n\nKruka: 21 cm (från Blomsterlandet).",
+    } },
+  ];
+  let additionsRunning = false;
+  async function runAdditions() {
+    if (additionsRunning) return;
+    additionsRunning = true;
+    try {
+      for (const a of ADDITIONS) {
+        const k = "vaxtvakten.added." + a.key;
+        if (store.get(k)) continue;
+        if (!state.plants.some(p => p.id === a.plant.id)) replacePlant(await rpc("save_plant", { p: toRow(a.plant) }));
+        store.set(k, "1");
+      }
+    } catch {} finally { additionsRunning = false; }
+  }
+
   async function load() {
     try {
       const rows = await rpc("list_plants", {});
       state.plants = rows.map(fromRow);
       state.ready = true; setOffline(false); render();
+      runAdditions();
     } catch (e) {
       if (e.code === "wrong_pin") return lock("PIN-koden stämmer inte längre. Skriv in den nya.");
       if (e.code === "offline") setOffline(true);
@@ -435,6 +459,7 @@
     state.plants = rows.map(fromRow); state.ready = true;
     $("#lock").hidden = true; $("#app").hidden = false;
     render();
+    runAdditions();
   }
   $("#pinForm").addEventListener("submit", async e => {
     e.preventDefault();

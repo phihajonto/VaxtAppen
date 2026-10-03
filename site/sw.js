@@ -1,5 +1,5 @@
 // Växtvakten service worker: visar pushnotiser och gör att appen startar utan nät.
-const CACHE = "vaxtvakten-v2";
+const CACHE = "vaxtvakten-v3";
 const SHELL = ["./", "index.html", "styles.css", "app.js", "config.js", "manifest.webmanifest", "icons/icon-192.png"];
 
 self.addEventListener("install", e => {
