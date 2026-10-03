@@ -2,7 +2,7 @@
   const CFG = window.VAXTVAKTEN_CONFIG || {};
   const DAY = 86400000;
   const PIN_KEY = "vaxtvakten.pin";
-  const state = { plants: [], openId: null, mode: null, confirmDelete: false, ready: false, offline: false };
+  const state = { plants: [], openId: null, mode: null, confirmDelete: false, confirmNewCode: false, ready: false, offline: false, household: null };
   let pin = "";
 
   const $ = s => document.querySelector(s);
@@ -28,7 +28,8 @@
           // New-style publishable keys (sb_publishable_…) go in apikey only; legacy anon keys are JWTs.
           ...(CFG.supabaseAnonKey.startsWith("sb_") ? {} : { Authorization: `Bearer ${CFG.supabaseAnonKey}` }),
         },
-        body: JSON.stringify({ p_pin: pin, ...args }),
+        // Creating a household is the only call made before there is a code.
+        body: JSON.stringify(fn === "create_household" ? args : { p_pin: pin, ...args }),
       });
     } catch { throw new ApiError("offline", "Ingen anslutning"); }
     const text = await res.text();
@@ -37,6 +38,8 @@
       const msg = body?.message || "";
       if (msg.includes("wrong_pin")) throw new ApiError("wrong_pin", msg);
       if (msg.includes("image_too_large")) throw new ApiError("image_too_large", msg);
+      // The database has not been updated with 3-hushall.sql yet.
+      if (body?.code === "PGRST202") throw new ApiError("not_migrated", msg);
       throw new ApiError("server", msg || res.statusText);
     }
     return body;
@@ -61,7 +64,8 @@
   ];
   let additionsRunning = false;
   async function runAdditions() {
-    if (additionsRunning) return;
+    // Only the first household (the one these plants belong to); unknown means an older database with one household.
+    if (additionsRunning || state.household?.original === false) return;
     additionsRunning = true;
     try {
       for (const a of ADDITIONS) {
@@ -75,16 +79,25 @@
 
   async function load() {
     try {
-      const rows = await rpc("list_plants", {});
+      const [rows] = await Promise.all([rpc("list_plants", {}), loadHousehold()]);
       state.plants = rows.map(fromRow);
       state.ready = true; setOffline(false); render();
       runAdditions();
     } catch (e) {
-      if (e.code === "wrong_pin") return lock("PIN-koden stämmer inte längre. Skriv in den nya.");
+      if (e.code === "wrong_pin") return lock(WRONG_CODE_LATER);
       if (e.code === "offline") setOffline(true);
       else toast("Kunde inte hämta växterna. Försök igen om en stund.");
     }
   }
+  const WRONG_CODE_LATER = "Koden fungerar inte längre. Den kan ha bytts – fråga någon i hushållet om den nya.";
+  async function loadHousehold() {
+    try { state.household = await rpc("household_info", {}); }
+    catch (e) { if (e.code === "not_migrated") state.household = null; else throw e; }
+    const el = $("#householdName");
+    el.hidden = !state.household;
+    el.textContent = state.household?.name || "";
+  }
+
   function setOffline(on) {
     state.offline = on;
     const n = $("#storeNotice");
@@ -144,7 +157,7 @@
     return restoreWatering(id, { lastWatered: history[0] || null, history }, `Senaste vattningen av ${p.name} är borttagen.`);
   }
   function errText(e) {
-    if (e?.code === "wrong_pin") { lock("PIN-koden stämmer inte längre. Skriv in den nya."); return "Fel PIN-kod."; }
+    if (e?.code === "wrong_pin") { lock(WRONG_CODE_LATER); return "Fel kod."; }
     if (e?.code === "offline") return "Ingen anslutning. Försök igen när du är online.";
     if (e?.code === "image_too_large") return "Bilden är för stor. Välj en mindre bild.";
     return "Kunde inte spara. Försök igen.";
@@ -154,10 +167,10 @@
   function cardHTML(p) {
     const s = schedule(p), l = dueLabel(s), due = s.daysLeft <= 0;
     const initial = esc((p.name || "?").trim().charAt(0).toUpperCase());
-    return `<div class="card ${due ? "is-due" : ""}" role="button" tabindex="0" data-open="${esc(p.id)}">
+    return `<div class="card ${due ? "is-due" : ""}" data-open="${esc(p.id)}">
       <div class="thumb">${p.imageUrl ? `<img src="${esc(p.imageUrl)}" alt="" loading="lazy">` : initial}</div>
       <div class="card-main">
-        <div class="card-name">${esc(p.name)}</div>
+        <button class="card-name" type="button" data-open="${esc(p.id)}">${esc(p.name)}</button>
         ${p.latin ? `<div class="card-latin">${esc(p.latin)}</div>` : ""}
         <div class="card-meta"><span class="pill ${l.cls}">${l.text}</span></div>
         <div class="gauge ${due ? "due" : ""}" aria-hidden="true"><span style="width:${Math.round((due ? 1 : s.pct) * 100)}%"></span></div>
@@ -242,13 +255,19 @@
         </form>`;
     } else if (state.mode === "remind") {
       inner = remindHTML();
+    } else if (state.mode === "household") {
+      inner = householdHTML();
     }
     root.innerHTML = `<div class="scrim" data-action="scrim"><div class="sheet" role="dialog" aria-modal="true" aria-labelledby="sheetTitle">${inner}</div></div>`;
     if (state.mode === "remind") bindRemind();
   }
 
-  function openSheet(mode, id) { state.mode = mode; state.openId = id || null; state.confirmDelete = false; renderSheet(); const f = document.querySelector("#sheetRoot input:not([type=file]), #sheetRoot .water-big"); f && f.focus({ preventScroll: true }); }
-  function closeSheet() { state.mode = null; state.openId = null; state.confirmDelete = false; $("#sheetRoot").innerHTML = ""; }
+  function openSheet(mode, id) { state.mode = mode; state.openId = id || null; state.confirmDelete = false; state.confirmNewCode = false; renderSheet(); const f = document.querySelector("#sheetRoot input:not([type=file]), #sheetRoot .water-big"); f && f.focus({ preventScroll: true }); }
+  function closeSheet() {
+    const reopen = state.mode && state.mode !== "view" ? (state.mode === "household" ? $("#householdBtn") : state.mode === "remind" ? $("#remindBtn") : null) : null;
+    state.mode = null; state.openId = null; state.confirmDelete = false; state.confirmNewCode = false; $("#sheetRoot").innerHTML = "";
+    if (reopen && !$("#app").hidden) reopen.focus({ preventScroll: true });
+  }
 
   function toast(msg, action) {
     const r = $("#toastRoot");
@@ -267,6 +286,14 @@
       if (act === "scrim" && e.target !== a) return;
       if (act === "close" || act === "scrim") closeSheet();
       else if (act === "add") openSheet("add");
+      else if (act === "show-create") showLockView("create");
+      else if (act === "hide-create") showLockView("join");
+      else if (act === "enter-created") enterCreated();
+      else if (act === "share-code") shareCode(created?.code || pin, created?.name || state.household?.name);
+      else if (act === "ask-new-code") { state.confirmNewCode = true; renderSheet(); $("#sheetRoot [data-action=do-new-code]")?.focus(); }
+      else if (act === "cancel-new-code") { state.confirmNewCode = false; renderSheet(); }
+      else if (act === "do-new-code") { a.disabled = true; await newCode(); }
+      else if (act === "leave") leaveHousehold();
       else if (act === "edit") openSheet("edit", state.openId);
       else if (act === "undo-latest") { a.disabled = true; await undoLatest(state.openId); }
       else if (act === "ask-delete") { state.confirmDelete = true; renderSheet(); }
@@ -283,6 +310,7 @@
   });
   $("#addBtn").addEventListener("click", () => openSheet("add"));
   $("#remindBtn").addEventListener("click", () => openSheet("remind"));
+  $("#householdBtn").addEventListener("click", () => openSheet("household"));
   document.addEventListener("keydown", e => {
     if (e.key === "Escape" && state.mode) closeSheet();
     if ((e.key === "Enter" || e.key === " ") && e.target.matches?.("[data-open]")) { e.preventDefault(); openSheet("view", e.target.dataset.open); }
@@ -293,6 +321,7 @@
     $("#f-preview").innerHTML = `<img src="${url}" alt="">`;
   });
   document.addEventListener("submit", async e => {
+    if (e.target.id === "renameForm") return renameHousehold(e);
     if (e.target.id !== "plantForm") return;
     e.preventDefault();
     const f = new FormData(e.target);
@@ -373,10 +402,10 @@
     if (!sub) sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64ToBytes(CFG.vapidPublicKey) });
     await rpc("save_subscription", { p_sub: sub.toJSON() });
   }
-  async function disablePush() {
+  async function disablePush(code = pin) {
     const sub = await currentSubscription();
     if (!sub) return;
-    try { await rpc("delete_subscription", { p_endpoint: sub.endpoint }); } catch {}
+    try { await rpc("delete_subscription", { p_pin: code, p_endpoint: sub.endpoint }); } catch {}
     await sub.unsubscribe();
   }
 
@@ -445,30 +474,146 @@
     setTimeout(() => URL.revokeObjectURL(a.href), 5000);
   }
 
-  /* ---------- PIN ---------- */
+  /* ---------- households ---------- */
+  function householdHTML() {
+    const h = state.household;
+    const top = `<div class="sheet-top"><h2 id="sheetTitle">Hushåll</h2><button class="close" type="button" data-action="close" aria-label="Stäng">×</button></div>`;
+    if (!h) {
+      return `${top}<p class="notice">Databasen behöver uppdateras för att hushåll ska fungera. Kör filen <b>supabase/3-hushall.sql</b> i Supabase.</p>
+        <button class="btn" type="button" data-action="leave">Logga ut från den här enheten</button>`;
+    }
+    return `${top}
+      <form id="renameForm">
+        <label for="h-name">Namn på hushållet<input id="h-name" name="name" maxlength="60" required value="${esc(h.name)}"></label>
+        <div><button class="btn" type="submit">Spara namn</button></div>
+      </form>
+      <div><h3 style="font-size:18px">Er kod</h3>
+      <p class="desc">Alla med koden ser samma växter och kan vattna, ändra och ta bort dem. Dela den bara med dem ni bor med.</p></div>
+      <p class="code-box">${esc(pin)}</p>
+      <button class="btn primary" type="button" data-action="share-code">Dela kod</button>
+      <div><h3 style="font-size:18px">Byt kod</h3>
+      <p class="desc">Har koden kommit till fel person kan ni byta den. Den gamla koden slutar fungera direkt, och alla andra i hushållet behöver skriva in den nya.</p></div>
+      ${state.confirmNewCode
+        ? `<div class="confirm"><div>Byta kod för ${esc(h.name)}?</div><div class="row"><button class="btn" type="button" data-action="cancel-new-code">Avbryt</button><button class="btn danger" type="button" data-action="do-new-code">Byt kod</button></div></div>`
+        : `<div><button class="btn" type="button" data-action="ask-new-code">Byt kod …</button></div>`}
+      <div><h3 style="font-size:18px">Byt hushåll</h3>
+      <p class="desc">Loggar ut den här enheten och stänger av dess notiser. Växterna finns kvar för de andra i hushållet.</p></div>
+      <div><button class="btn danger ghost" type="button" data-action="leave">Logga ut från ${esc(h.name)}</button></div>`;
+  }
+
+  async function renameHousehold(e) {
+    e.preventDefault();
+    const name = String(new FormData(e.target).get("name") || "").trim();
+    if (!name) return;
+    try {
+      state.household = await rpc("rename_household", { p_name: name });
+      $("#householdName").textContent = state.household.name;
+      toast("Namnet är sparat.");
+    } catch (er) { toast(errText(er)); }
+  }
+
+  async function newCode() {
+    try {
+      const { code } = await rpc("new_household_code", {});
+      pin = code; store.set(PIN_KEY, code);
+      state.confirmNewCode = false; renderSheet();
+      toast("Ny kod skapad. Dela den med de andra i hushållet.");
+    } catch (er) { toast(errText(er)); renderSheet(); }
+  }
+
+  function leaveHousehold() {
+    const code = pin;
+    lock("");
+    // Stop this device's notifications for the household it left, without making the user wait.
+    disablePush(code).catch(() => {});
+  }
+
+  const shareUrl = code => `${location.origin}${location.pathname}#kod=${encodeURIComponent(code)}`;
+  async function shareCode(code, name) {
+    if (!code) return;
+    const text = `Gå med i ${name ? `"${name}"` : "vårt hushåll"} i Växtvakten. Koden är ${code}.`;
+    const url = shareUrl(code);
+    if (navigator.share) {
+      try { await navigator.share({ title: "Växtvakten", text, url }); return; }
+      catch (e) { if (e.name === "AbortError") return; }
+    }
+    try { await navigator.clipboard.writeText(`${text}\n${url}`); toast("Länk och kod är kopierade. Klistra in dem i ett meddelande."); }
+    catch { toast(`Koden är ${code}.`); }
+  }
+
+  /* ---------- lock screen ---------- */
+  let created = null;
+  function showLockView(view) {
+    $("#pinForm").hidden = view !== "join";
+    $("#createToggle").hidden = view !== "join";
+    $("#createForm").hidden = view !== "create";
+    $("#createdPanel").hidden = view !== "created";
+    if (view === "join") setTimeout(() => $("#pinInput").focus(), 50);
+    if (view === "create") { $("#createErr").textContent = ""; setTimeout(() => $("#createName").focus(), 50); }
+    if (view === "created") setTimeout(() => $("#createdTitle").focus(), 50);
+  }
   function lock(message) {
-    store.del(PIN_KEY); pin = "";
+    store.del(PIN_KEY); pin = ""; created = null;
+    state.plants = []; state.ready = false; state.household = null;
     $("#app").hidden = true; $("#lock").hidden = false; closeSheet();
+    clearTimeout(toast.t); $("#toastRoot").innerHTML = "";
+    $("#householdName").hidden = true;
     $("#pinErr").textContent = message || "";
-    setTimeout(() => $("#pinInput").focus(), 50);
+    showLockView("join");
   }
   async function unlock(p) {
     pin = p;
-    const rows = await rpc("list_plants", {});
+    const [rows] = await Promise.all([rpc("list_plants", {}), loadHousehold()]);
     store.set(PIN_KEY, p);
     state.plants = rows.map(fromRow); state.ready = true;
     $("#lock").hidden = true; $("#app").hidden = false;
     render();
     runAdditions();
+    rebindPush();
+  }
+  // A device that already has notifications on follows the household it opened last.
+  async function rebindPush() {
+    try {
+      const sub = await currentSubscription();
+      if (sub && Notification.permission === "granted") await rpc("save_subscription", { p_sub: sub.toJSON() });
+    } catch {}
+  }
+  function codeErrText(er) {
+    return er.code === "wrong_pin" ? "Den koden finns inte. Kontrollera stavningen och försök igen."
+      : er.code === "offline" ? "Ingen anslutning. Försök igen när du är online."
+      : "Något gick fel. Försök igen om en stund.";
   }
   $("#pinForm").addEventListener("submit", async e => {
     e.preventDefault();
     const btn = e.target.querySelector("button"); btn.disabled = true;
     $("#pinErr").textContent = "";
     try { await unlock($("#pinInput").value.trim()); $("#pinInput").value = ""; }
-    catch (er) { pin = ""; $("#pinErr").textContent = er.code === "wrong_pin" ? "Fel PIN-kod. Försök igen." : er.code === "offline" ? "Ingen anslutning. Försök igen när du är online." : "Något gick fel. Försök igen om en stund."; }
+    catch (er) { pin = ""; $("#pinErr").textContent = codeErrText(er); }
     btn.disabled = false;
   });
+  $("#createForm").addEventListener("submit", async e => {
+    e.preventDefault();
+    const name = $("#createName").value.trim();
+    const err = $("#createErr");
+    err.textContent = "";
+    if (!name) { err.textContent = "Ge hushållet ett namn."; $("#createName").focus(); return; }
+    const btn = e.target.querySelector('[type="submit"]'); btn.disabled = true;
+    try {
+      created = await rpc("create_household", { p_name: name });
+      $("#createdCode").textContent = created.code;
+      $("#createName").value = "";
+      showLockView("created");
+    } catch (er) {
+      err.textContent = er.code === "not_migrated" ? "Det går inte att skapa hushåll än. Databasen behöver uppdateras med 3-hushall.sql."
+        : er.code === "offline" ? "Ingen anslutning. Försök igen när du är online." : "Det gick inte att skapa hushållet. Försök igen.";
+    }
+    btn.disabled = false;
+  });
+  async function enterCreated() {
+    if (!created) return showLockView("join");
+    try { await unlock(created.code); created = null; }
+    catch (er) { showLockView("join"); $("#pinInput").value = created.code; $("#pinErr").textContent = codeErrText(er); }
+  }
 
   /* ---------- boot ---------- */
   if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
@@ -476,8 +621,15 @@
     document.body.innerHTML = `<div class="lock"><div class="lock-card"><h1>Växtvakten</h1><p>Appen är inte inställd än. Fyll i config.js med uppgifterna från Supabase.</p></div></div>`;
     return;
   }
+  // A shared link looks like …/#kod=ABCD-EFGH-JKLM. The code stays in the browser; the part after # is never sent to a server.
+  const linkCode = decodeURIComponent((location.hash.match(/kod=([^&]+)/) || [])[1] || "").trim();
+  if (linkCode) history.replaceState(null, "", location.pathname + location.search);
   const saved = store.get(PIN_KEY);
-  if (saved) {
+  if (linkCode && linkCode !== saved) {
+    lock();
+    $("#pinInput").value = linkCode;
+    $("#pinForm").requestSubmit();
+  } else if (saved) {
     pin = saved; $("#app").hidden = false; render(); load();
   } else lock();
 

@@ -1,5 +1,6 @@
-// Växtvakten: skickar en pushnotis till alla som slagit på notiser
-// när minst en växt behöver vatten idag. Körs varje morgon av ett schemalagt jobb.
+// Växtvakten: skickar en pushnotis till varje hushåll där minst en växt behöver vatten idag.
+// Notisen går bara till enheter som slagit på notiser i just det hushållet.
+// Körs varje morgon av ett schemalagt jobb.
 import webpush from "npm:web-push@3.6.7";
 import { createClient } from "npm:@supabase/supabase-js@2";
 
@@ -19,26 +20,32 @@ Deno.serve(async () => {
 
   const { data: plants, error } = await supabase
     .from("plants")
-    .select("name, interval_days, last_watered");
+    .select("household_id, name, interval_days, last_watered");
   if (error) return Response.json({ error: error.message }, { status: 500 });
 
   const today = Date.parse(stockholmDate(new Date()));
-  const due = (plants ?? []).filter((p) => {
-    if (!p.last_watered) return true;
-    const last = Date.parse(stockholmDate(new Date(p.last_watered)));
-    return Math.round((today - last) / DAY) >= p.interval_days;
-  });
-  if (!due.length) return Response.json({ due: 0, sent: 0 });
+  const dueByHousehold = new Map<string, string[]>();
+  for (const p of plants ?? []) {
+    const isDue = !p.last_watered ||
+      Math.round((today - Date.parse(stockholmDate(new Date(p.last_watered)))) / DAY) >= p.interval_days;
+    if (!isDue) continue;
+    const names = dueByHousehold.get(p.household_id) ?? [];
+    names.push(p.name);
+    dueByHousehold.set(p.household_id, names);
+  }
+  if (!dueByHousehold.size) return Response.json({ households: 0, sent: 0 });
 
-  const names = due.map((p) => p.name);
-  const payload = JSON.stringify({
-    title: due.length === 1 ? `Dags att vattna ${names[0]}` : `${due.length} växter behöver vatten`,
-    body: due.length === 1 ? "Tryck för att öppna Växtvakten." : names.join(", "),
-  });
-
-  const { data: subs } = await supabase.from("push_subscriptions").select("endpoint, subscription");
+  const { data: subs } = await supabase
+    .from("push_subscriptions")
+    .select("endpoint, subscription, household_id")
+    .in("household_id", [...dueByHousehold.keys()]);
   let sent = 0;
   for (const s of subs ?? []) {
+    const names = dueByHousehold.get(s.household_id)!;
+    const payload = JSON.stringify({
+      title: names.length === 1 ? `Dags att vattna ${names[0]}` : `${names.length} växter behöver vatten`,
+      body: names.length === 1 ? "Tryck för att öppna Växtvakten." : names.join(", "),
+    });
     try {
       await webpush.sendNotification(s.subscription, payload, { TTL: 60 * 60 * 12 });
       sent++;
@@ -51,5 +58,5 @@ Deno.serve(async () => {
       }
     }
   }
-  return Response.json({ due: due.length, sent });
+  return Response.json({ households: dueByHousehold.size, sent });
 });
