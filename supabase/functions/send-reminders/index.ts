@@ -22,6 +22,11 @@ Deno.serve(async () => {
   }
 });
 
+// Keys pasted into Supabase secrets often carry quotes, spaces, line breaks or "=" padding, or use
+// standard base64 (+ /) instead of the URL-safe form web-push requires. Clean that up before use.
+const cleanKey = (v: string) =>
+  v.trim().replace(/^["']+|["']+$/g, "").replace(/\s+/g, "").replace(/=+$/, "").replace(/\+/g, "-").replace(/\//g, "_");
+
 async function sendReminders(): Promise<Response> {
   const missing = ["VAPID_PUBLIC_KEY", "VAPID_PRIVATE_KEY"].filter((k) => !Deno.env.get(k));
   if (missing.length) {
@@ -33,9 +38,9 @@ async function sendReminders(): Promise<Response> {
   );
   try {
     webpush.setVapidDetails(
-      Deno.env.get("VAPID_SUBJECT") ?? "mailto:vaxtvakten@example.com",
-      Deno.env.get("VAPID_PUBLIC_KEY")!,
-      Deno.env.get("VAPID_PRIVATE_KEY")!,
+      Deno.env.get("VAPID_SUBJECT")?.trim().replace(/^["']+|["']+$/g, "") || "mailto:vaxtvakten@example.com",
+      cleanKey(Deno.env.get("VAPID_PUBLIC_KEY")!),
+      cleanKey(Deno.env.get("VAPID_PRIVATE_KEY")!),
     );
   } catch (e) {
     return fail(
