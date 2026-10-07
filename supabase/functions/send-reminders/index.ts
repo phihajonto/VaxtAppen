@@ -7,21 +7,54 @@ import { createClient } from "npm:@supabase/supabase-js@2";
 const DAY = 86_400_000;
 const stockholmDate = (d: Date) => d.toLocaleDateString("sv-SE", { timeZone: "Europe/Stockholm" });
 
+// Every failure is returned as {"fel": "..."} with a plain-language reason, so the Test button and
+// the cron history show what is wrong instead of only "Internal server error".
+const fail = (fel: string, detalj?: string) => {
+  console.error(fel, detalj ?? "");
+  return Response.json({ fel, detalj }, { status: 500 });
+};
+
 Deno.serve(async () => {
+  try {
+    return await sendReminders();
+  } catch (e) {
+    return fail("Oväntat fel i send-reminders.", (e as Error)?.message ?? String(e));
+  }
+});
+
+async function sendReminders(): Promise<Response> {
+  const missing = ["VAPID_PUBLIC_KEY", "VAPID_PRIVATE_KEY"].filter((k) => !Deno.env.get(k));
+  if (missing.length) {
+    return fail(`Hemliga nycklar saknas: ${missing.join(", ")}. Lägg in dem under Edge Functions → Secrets.`);
+  }
   const supabase = createClient(
     Deno.env.get("SUPABASE_URL")!,
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
   );
-  webpush.setVapidDetails(
-    Deno.env.get("VAPID_SUBJECT") ?? "mailto:vaxtvakten@example.com",
-    Deno.env.get("VAPID_PUBLIC_KEY")!,
-    Deno.env.get("VAPID_PRIVATE_KEY")!,
-  );
+  try {
+    webpush.setVapidDetails(
+      Deno.env.get("VAPID_SUBJECT") ?? "mailto:vaxtvakten@example.com",
+      Deno.env.get("VAPID_PUBLIC_KEY")!,
+      Deno.env.get("VAPID_PRIVATE_KEY")!,
+    );
+  } catch (e) {
+    return fail(
+      "VAPID-nycklarna är ogiltiga. Kontrollera att de är inklistrade utan mellanslag och att VAPID_SUBJECT börjar med mailto:.",
+      (e as Error).message,
+    );
+  }
 
   const { data: plants, error } = await supabase
     .from("plants")
     .select("household_id, name, interval_days, last_watered");
-  if (error) return Response.json({ error: error.message }, { status: 500 });
+  if (error) {
+    return fail(
+      error.message.includes("household_id")
+        ? "Databasen saknar hushåll. Kör supabase/3-hushall.sql i SQL Editor."
+        : "Kunde inte läsa växterna.",
+      error.message,
+    );
+  }
 
   const today = Date.parse(stockholmDate(new Date()));
   const dueByHousehold = new Map<string, string[]>();
@@ -35,10 +68,11 @@ Deno.serve(async () => {
   }
   if (!dueByHousehold.size) return Response.json({ households: 0, sent: 0 });
 
-  const { data: subs } = await supabase
+  const { data: subs, error: subsError } = await supabase
     .from("push_subscriptions")
     .select("endpoint, subscription, household_id")
     .in("household_id", [...dueByHousehold.keys()]);
+  if (subsError) return fail("Kunde inte läsa notisprenumerationerna.", subsError.message);
   let sent = 0;
   for (const s of subs ?? []) {
     const names = dueByHousehold.get(s.household_id)!;
@@ -59,4 +93,4 @@ Deno.serve(async () => {
     }
   }
   return Response.json({ households: dueByHousehold.size, sent });
-});
+}
