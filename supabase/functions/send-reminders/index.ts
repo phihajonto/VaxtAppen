@@ -27,8 +27,13 @@ Deno.serve(async () => {
 const cleanKey = (v: string) =>
   v.trim().replace(/^["']+|["']+$/g, "").replace(/\s+/g, "").replace(/=+$/, "").replace(/\+/g, "-").replace(/\//g, "_");
 
+// The public key is not secret: the app already ships it in site/config.js (vapidPublicKey), and the
+// two must be identical. Keeping it here means a badly pasted VAPID_PUBLIC_KEY secret can't break the
+// reminders. If you ever create new VAPID keys, change both places.
+const VAPID_PUBLIC_KEY = "BFWdLi4fy-0HqTSXT5vKSAxVy3vPm4gk_ODE4kraAWI6Hf2rRBQstp5Pl2wOXe32Fkh57FjMm5cu8ri-ZUC9PYY";
+
 async function sendReminders(): Promise<Response> {
-  const missing = ["VAPID_PUBLIC_KEY", "VAPID_PRIVATE_KEY"].filter((k) => !Deno.env.get(k));
+  const missing = ["VAPID_PRIVATE_KEY"].filter((k) => !Deno.env.get(k));
   if (missing.length) {
     return fail(`Hemliga nycklar saknas: ${missing.join(", ")}. Lägg in dem under Edge Functions → Secrets.`);
   }
@@ -39,12 +44,12 @@ async function sendReminders(): Promise<Response> {
   try {
     webpush.setVapidDetails(
       Deno.env.get("VAPID_SUBJECT")?.trim().replace(/^["']+|["']+$/g, "") || "mailto:vaxtvakten@example.com",
-      cleanKey(Deno.env.get("VAPID_PUBLIC_KEY")!),
+      VAPID_PUBLIC_KEY,
       cleanKey(Deno.env.get("VAPID_PRIVATE_KEY")!),
     );
   } catch (e) {
     return fail(
-      "VAPID-nycklarna är ogiltiga. Kontrollera att de är inklistrade utan mellanslag och att VAPID_SUBJECT börjar med mailto:.",
+      "VAPID_PRIVATE_KEY är ogiltig. Kopiera den på nytt från HEMLIGA-NYCKLAR.txt till Edge Functions → Secrets.",
       (e as Error).message,
     );
   }
