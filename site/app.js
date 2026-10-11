@@ -510,7 +510,7 @@
       <p class="desc">Varje morgon får du en notis om någon växt behöver vatten, även när appen är stängd. Slå på det på varje telefon eller dator som ska få notiser.</p></div>
       ${pushPart}
       <div><h3 style="font-size:18px">Kalender</h3>
-      <p class="desc">Du kan också spara en kalenderfil med en påminnelse kl. 08 för varje växt. Spara en ny fil om schemat ändras.</p></div>
+      <p class="desc">Du kan också spara en kalenderfil med en påminnelse kl. 07 för varje växt. Spara en ny fil om schemat ändras.</p></div>
       <button class="btn" type="button" id="icsBtn" ${state.plants.length ? "" : "disabled"}>Spara kalenderfil (.ics)</button>`;
   }
   async function bindRemind() {
@@ -590,7 +590,7 @@
       const end = new Date(start.getTime() + DAY);
       return ["BEGIN:VEVENT", `UID:${p.id}@vaxtvakten`, `DTSTAMP:${stamp}`, `DTSTART;VALUE=DATE:${d8(start)}`, `DTEND;VALUE=DATE:${d8(end)}`,
         `RRULE:FREQ=DAILY;INTERVAL=${s.interval}`, `SUMMARY:Vattna ${clean(p.name)}`,
-        "BEGIN:VALARM", "ACTION:DISPLAY", `DESCRIPTION:Vattna ${clean(p.name)}`, "TRIGGER:PT8H", "END:VALARM", "END:VEVENT"].join("\r\n");
+        "BEGIN:VALARM", "ACTION:DISPLAY", `DESCRIPTION:Vattna ${clean(p.name)}`, "TRIGGER:PT7H", "END:VALARM", "END:VEVENT"].join("\r\n");
     });
     const ics = ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//Vaxtvakten//SV", "CALSCALE:GREGORIAN", ...ev, "END:VCALENDAR"].join("\r\n");
     const a = document.createElement("a");

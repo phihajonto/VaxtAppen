@@ -1,13 +1,18 @@
 // Växtvakten: skickar en pushnotis till varje hushåll där minst en växt behöver vatten idag.
 // Notisen går bara till enheter som slagit på notiser i just det hushållet.
 //
-// Två jobb startar funktionen varje morgon: morgonjobbet i Supabase (pg_cron, kl. 06:00 UTC) och ett
-// reservjobb i GitHub Actions en halvtimme senare ({"source": "github"}). Den som kommer först
-// skickar; den andra ser att dagens påminnelse redan är gjord och gör ingenting.
+// Påminnelsen går ut kl. 07 svensk tid, sommar som vinter. Supabase räknar i UTC, så morgonjobbet
+// (pg_cron) startar funktionen både 05:00 och 06:00 UTC, och funktionen skickar först när klockan är
+// 07 i Sverige. Ett reservjobb i GitHub Actions gör likadant en halvtimme senare ({"source": "github"}).
+// Den som kommer först efter 07 skickar; de andra ser att dagens påminnelse redan är gjord.
 // {"force": true} skickar även om dagens påminnelse redan är gjord, för att testa.
 import { fail, preflight, push, type PushResult, readLastRun, reply, setup, stockholmDate, LAST_RUN_KEY, type LastRun } from "../_shared/push.ts";
 
 const DAY = 86_400_000;
+// Svensk timme då påminnelsen tidigast går ut.
+const SEND_HOUR = 7;
+const stockholmHour = (d: Date) =>
+  Number(new Intl.DateTimeFormat("sv-SE", { timeZone: "Europe/Stockholm", hour: "numeric", hourCycle: "h23" }).format(d));
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return preflight();
@@ -25,6 +30,10 @@ async function sendReminders(source: string, force: boolean): Promise<Response> 
   if (supabase instanceof Response) return supabase;
 
   const todayStr = stockholmDate(new Date());
+  const hour = stockholmHour(new Date());
+  if (!force && hour < SEND_HOUR) {
+    return reply({ skipped: true, reason: `För tidigt: klockan är ${hour} i Sverige, påminnelsen går ut kl. 0${SEND_HOUR}.` });
+  }
   const last = await readLastRun(supabase);
   if (!force && last?.day === todayStr) {
     return reply({ skipped: true, reason: `Dagens påminnelse är redan gjord (${last.source}, ${last.at}).`, lastRun: last });
