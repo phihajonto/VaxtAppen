@@ -78,7 +78,7 @@ Adressen är **https://phihajonto.github.io/VaxtAppen/**. Den som använder appe
 2. Klistra in `supabase/2-paminnelse-varje-morgon.sql`. Adressen och nyckeln måste vara ifyllda.
 3. Klicka **Run**.
 
-Nu körs påminnelsen kl. 08 på sommaren och kl. 07 på vintern. En notis skickas bara de dagar någon växt behöver vatten.
+Nu går påminnelsen ut kl. 07 svensk tid, både sommar och vinter. Ändras `2-paminnelse-varje-morgon.sql` på `main` körs den i Supabase automatiskt. En notis skickas bara de dagar någon växt behöver vatten.
 
 ---
 

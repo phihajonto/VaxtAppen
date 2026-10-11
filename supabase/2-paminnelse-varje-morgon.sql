@@ -1,7 +1,10 @@
 -- Växtvakten: kör påminnelsen varje morgon.
--- Kör i Supabase → SQL Editor efter att funktionen send-reminders är skapad.
+-- Körs automatiskt från GitHub när filen ändras på main (.github/workflows/supabase-sql.yml).
+-- Går också att köra för hand i Supabase → SQL Editor. Filen går att köra flera gånger.
 -- Adressen och nyckeln är redan ifyllda för ditt projekt.
--- 06:00 UTC är 08:00 sommartid och 07:00 vintertid i Sverige.
+-- Påminnelsen ska gå ut kl. 07 svensk tid året runt. pg_cron räknar i UTC, så jobbet körs både
+-- 05:00 och 06:00 UTC (07:00 sommartid respektive vintertid). Funktionen skickar bara när klockan
+-- är 07 eller senare i Sverige, och bara en gång per dag.
 
 create extension if not exists pg_cron;
 create extension if not exists pg_net;
@@ -11,7 +14,7 @@ where exists (select 1 from cron.job where jobname = 'vaxtvakten-paminnelse');
 
 select cron.schedule(
   'vaxtvakten-paminnelse',
-  '0 6 * * *',
+  '0 5,6 * * *',
   $$
   select net.http_post(
     url     := 'https://bpgmsbxhevlqdunoxhye.supabase.co/functions/v1/send-reminders',

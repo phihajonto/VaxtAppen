@@ -1,7 +1,8 @@
 # Reservjobb för morgonpåminnelsen.
 #
-# Morgonjobbet i Supabase (pg_cron) startar send-reminders kl. 06:00 UTC. Det här jobbet startar
-# samma funktion en halvtimme senare. Har morgonjobbet redan skickat dagens påminnelse gör
+# Morgonjobbet i Supabase (pg_cron) startar send-reminders kl. 07:00 svensk tid. Det här jobbet startar
+# samma funktion en halvtimme senare. GitHub räknar i UTC, så jobbet körs 05:30 och 06:30 UTC; funktionen
+# gör ingenting före kl. 07 svensk tid, så bara den körning som faller på 07:30 svensk tid räknas. Har morgonjobbet redan skickat dagens påminnelse gör
 # funktionen ingenting. Har det inte körts skickar funktionen påminnelsen nu i stället, och jobbet
 # markeras som misslyckat så att det syns under Actions att morgonjobbet i Supabase behöver ses över.
 #
@@ -11,7 +12,7 @@ name: Påminnelse (reserv)
 
 on:
   schedule:
-    - cron: "30 6 * * *"
+    - cron: "30 5,6 * * *"
   workflow_dispatch:
 
 permissions:
@@ -47,7 +48,7 @@ jobs:
             exit 1
           fi
           if grep -Eq '"skipped" *: *true' resp.json; then
-            echo "Morgonjobbet i Supabase har redan skickat dagens påminnelse. Allt fungerar."
+            echo "Inget att göra: $(grep -o '"reason" *: *"[^"]*"' resp.json | cut -d'"' -f4)"
           elif grep -Eq '"source" *: *"github"' resp.json; then
             echo "::error::Morgonjobbet i Supabase körde inte idag. Reservjobbet skickade påminnelsen i stället. Kör supabase/2-paminnelse-varje-morgon.sql i Supabase → SQL Editor."
             exit 1
