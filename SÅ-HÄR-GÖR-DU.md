@@ -82,6 +82,18 @@ Nu körs påminnelsen kl. 08 på sommaren och kl. 07 på vintern. En notis skick
 
 ---
 
+### Reservjobb och varning
+Ett reservjobb i GitHub (`.github/workflows/paminnelse-reserv.yml`) startar påminnelsen en halvtimme efter morgonjobbet. Har morgonjobbet redan skickat gör reservjobbet ingenting. Har det inte körts skickar reservjobbet påminnelsen i stället och markeras rött under **Actions**, så att du ser att morgonjobbet behöver ses över.
+
+Om påminnelsen ändå uteblir visar appen en orange ruta: *"Morgonpåminnelsen har inte gått ut sedan …"*.
+
+### Automatisk uppdatering av funktionerna
+Funktionerna i `supabase/functions` läggs ut i Supabase automatiskt när de ändras på `main`. Det kräver en engångsinställning:
+1. supabase.com → din profil → **Access Tokens** → **Generate new token**. Kopiera den.
+2. GitHub-repot → **Settings → Secrets and variables → Actions → New repository secret**. Namn: `SUPABASE_ACCESS_TOKEN`.
+
+---
+
 ## Del 4: Slå på notiser på telefonen
 
 **iPhone** (kräver iOS 16.4 eller senare):

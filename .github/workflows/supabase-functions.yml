@@ -1,5 +1,5 @@
-# Driftsätter påminnelsefunktionen (supabase/functions/send-reminders) i Supabase automatiskt
-# varje gång den ändras på main, så att ingen behöver klistra in koden för hand.
+# Driftsätter Växtvaktens funktioner (allt under supabase/functions) i Supabase automatiskt
+# varje gång de ändras på main, så att ingen behöver klistra in koden för hand.
 #
 # Engångsinställning: lägg in en Supabase-åtkomsttoken som hemlighet i GitHub.
 #   1. supabase.com → kontomenyn → Access Tokens → Generate new token.
@@ -40,6 +40,6 @@ jobs:
         if: steps.token.outputs.ok == 'true'
         with:
           version: latest
-      - name: Driftsätt send-reminders
+      - name: Driftsätt send-reminders, reminder-test och reminder-status
         if: steps.token.outputs.ok == 'true'
-        run: supabase functions deploy send-reminders --project-ref "$PROJECT_REF"
+        run: supabase functions deploy --project-ref "$PROJECT_REF"

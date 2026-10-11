@@ -44,6 +44,44 @@
     }
     return body;
   }
+  // Calls one of the app's Supabase Edge Functions. Returns { status, body }.
+  async function callFunction(name, payload) {
+    const res = await fetch(`${CFG.supabaseUrl}/functions/v1/${name}`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json", apikey: CFG.supabaseAnonKey,
+        ...(CFG.supabaseAnonKey.startsWith("sb_") ? {} : { Authorization: `Bearer ${CFG.supabaseAnonKey}` }),
+      },
+      body: JSON.stringify(payload || {}),
+    });
+    return { status: res.status, body: await res.json().catch(() => ({})) };
+  }
+
+  /* Warn in the app when the morning reminder hasn't gone out, so a broken schedule is noticed the
+     same day instead of when someone wonders why the notifications stopped. */
+  let lastRunCheck = 0;
+  async function checkReminderRun() {
+    if (Date.now() - lastRunCheck < 30 * 60 * 1000) return;
+    lastRunCheck = Date.now();
+    const box = $("#runNotice");
+    try {
+      const { status, body } = await callFunction("reminder-status");
+      if (status !== 200 || !body.today) return; // older setup without the status function
+      const hour = Number(new Intl.DateTimeFormat("sv-SE", { timeZone: "Europe/Stockholm", hour: "numeric", hourCycle: "h23" }).format(new Date()));
+      const yesterday = new Date(Date.parse(body.today) - DAY).toISOString().slice(0, 10);
+      // The reminder runs at 07–08 Swedish time, with the backup half an hour later.
+      const expected = hour >= 10 ? body.today : yesterday;
+      const last = body.lastRun?.day;
+      const ok = last && last >= expected;
+      box.hidden = !!ok;
+      if (!ok) {
+        box.textContent = last
+          ? `Morgonpåminnelsen har inte gått ut sedan ${fmt(last, { day: "numeric", month: "long" })}. Notiser kan utebli tills den är åtgärdad.`
+          : "Morgonpåminnelsen har inte gått ut än. Notiser kan utebli tills den är åtgärdad.";
+      }
+    } catch { /* offline: say nothing */ }
+  }
+
   const fromRow = r => ({
     id: r.id, name: r.name, latin: r.latin, description: r.description, light: r.light,
     intervalDays: r.interval_days, lastWatered: r.last_watered, history: r.history || [], imageUrl: r.image_url,
@@ -83,6 +121,7 @@
       state.plants = rows.map(fromRow);
       state.ready = true; setOffline(false); render();
       runAdditions();
+      checkReminderRun();
     } catch (e) {
       if (e.code === "wrong_pin") return lock(WRONG_CODE_LATER);
       if (e.code === "offline") setOffline(true);
@@ -528,18 +567,10 @@
       try { await rpc("save_subscription", { p_sub: sub.toJSON() }); } catch {}
       say("Lås telefonen nu. Testnotisen skickas om 10 sekunder.");
       try {
-        const res = await fetch(`${CFG.supabaseUrl}/functions/v1/send-reminders`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json", apikey: CFG.supabaseAnonKey,
-            ...(CFG.supabaseAnonKey.startsWith("sb_") ? {} : { Authorization: `Bearer ${CFG.supabaseAnonKey}` }),
-          },
-          body: JSON.stringify({ test: true, endpoint: sub.endpoint, delaySeconds: 10 }),
-        });
-        const body = await res.json().catch(() => ({}));
+        const { status, body } = await callFunction("reminder-test", { endpoint: sub.endpoint, delaySeconds: 10 });
         const svc = pushService(sub.endpoint);
-        if (res.ok && body.ok) say(`${svc} tog emot testnotisen (svar ${body.status}). Kom den inte fram ligger felet i telefonen: kontrollera Inställningar → Notiser → Växtvakten, och att inget fokusläge som Stör ej är på.`);
-        else if (res.status === 404 && !body.fel) say("Påminnelsefunktionen i Supabase behöver uppdateras för att kunna skicka testnotiser.");
+        if (status === 200 && body.ok) say(`${svc} tog emot testnotisen (svar ${body.status}). Kom den inte fram ligger felet i telefonen: kontrollera Inställningar → Notiser → Växtvakten, och att inget fokusläge som Stör ej är på.`);
+        else if (status === 404 && !body.fel) say("Testfunktionen finns inte i Supabase än. Den läggs ut automatiskt när SUPABASE_ACCESS_TOKEN finns i GitHub.");
         else say(`${body.fel || "Servern kunde inte skicka testnotisen."}${body.status ? ` (${svc} svarade ${body.status})` : ""}`);
       } catch {
         say("Fick inget svar från servern. Kom notisen ändå fungerar allt. Annars: kontrollera anslutningen och försök igen.");
@@ -665,6 +696,7 @@
     render();
     runAdditions();
     rebindPush();
+    checkReminderRun();
   }
   // A device that already has notifications on follows the household it opened last.
   async function rebindPush() {
