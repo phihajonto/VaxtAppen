@@ -148,3 +148,4 @@ button.card-name { display: block; width: 100%; text-align: left; background: no
 .card:has(button.card-name:focus-visible) { outline: 2px solid var(--leaf); outline-offset: 2px; }
 .date-form { display: grid; gap: 10px; padding: 12px; border: 1px dashed var(--line); border-radius: 12px; }
 .date-form .hint { margin: 0; font-size: 13px; color: var(--muted); }
+.test-box { display: grid; gap: 10px; padding: 12px; border: 1px dashed var(--line); border-radius: 12px; }

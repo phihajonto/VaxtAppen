@@ -457,7 +457,14 @@
     } else if (!pushSupported) {
       pushPart = `<p class="notice">Den här webbläsaren kan inte ta emot notiser. Prova Chrome, Edge, Firefox eller Safari.</p>`;
     } else {
-      pushPart = `<button class="btn primary" type="button" id="pushBtn" disabled>Kontrollerar …</button><p class="notice" id="pushMsg" hidden></p>`;
+      pushPart = `<button class="btn primary" type="button" id="pushBtn" disabled>Kontrollerar …</button><p class="notice" id="pushMsg" hidden></p>
+        <div class="test-box" id="testBox" hidden>
+          <h3 style="font-size:18px">Kommer inga notiser?</h3>
+          <p class="desc">Testa i två steg, så ser du var det stannar.</p>
+          <div class="row" style="justify-content:flex-start"><button class="btn" type="button" id="testLocalBtn">1. Visa en notis direkt</button>
+          <button class="btn" type="button" id="testServerBtn">2. Skicka via servern</button></div>
+          <p class="notice" id="testMsg" role="status" hidden></p>
+        </div>`;
     }
     return `<div class="sheet-top"><h2 id="sheetTitle">Påminnelser</h2><button class="close" type="button" data-action="close" aria-label="Stäng">×</button></div>
       <div><h3 style="font-size:18px">Notis på den här enheten</h3>
@@ -479,7 +486,9 @@
       btn.className = on ? "btn" : "btn primary";
       btn.dataset.on = on ? "1" : "";
       if (Notification.permission === "denied") { btn.disabled = true; show("Notiser är blockerade för den här sidan. Tillåt dem i webbläsarens eller telefonens inställningar."); }
+      $("#testBox").hidden = !on;
     };
+    bindPushTest();
     btn.addEventListener("click", async () => {
       btn.disabled = true; show("");
       try {
@@ -491,6 +500,52 @@
       refresh();
     });
     refresh();
+  }
+
+  /* Two-step check: (1) can this phone show a notification from the app at all, and (2) does a push
+     from the server reach it. Together they show whether a problem is in the phone or on the way. */
+  const pushService = endpoint => {
+    const host = new URL(endpoint).host;
+    return host.includes("apple") ? "Apple" : host.includes("google") ? "Google" : host.includes("mozilla") ? "Mozilla" : host;
+  };
+  function bindPushTest() {
+    const msg = $("#testMsg");
+    const say = t => { msg.hidden = false; msg.textContent = t; };
+    $("#testLocalBtn")?.addEventListener("click", async () => {
+      try {
+        const reg = await navigator.serviceWorker.ready;
+        await reg.showNotification("Växtvakten", { body: "Om du ser det här kan telefonen visa notiser från appen.", tag: "vaxtvakten-local" });
+        say("En notis har skickats på telefonen. Syntes den inte, dra ner från skärmens överkant. Finns den inte där heller är notiser avstängda för Växtvakten i telefonens inställningar (iPhone: Inställningar → Notiser → Växtvakten).");
+      } catch (e) {
+        say(`Telefonen kunde inte visa en notis: ${e?.message || e}. Kontrollera att notiser är tillåtna för Växtvakten i telefonens inställningar.`);
+      }
+    });
+    $("#testServerBtn")?.addEventListener("click", async e => {
+      const b = e.currentTarget; b.disabled = true;
+      const sub = await currentSubscription().catch(() => null);
+      if (!sub) { say("Telefonen är inte registrerad. Tryck Slå på notiser först."); b.disabled = false; return; }
+      // Make sure the server has this phone's current registration before testing it.
+      try { await rpc("save_subscription", { p_sub: sub.toJSON() }); } catch {}
+      say("Lås telefonen nu. Testnotisen skickas om 10 sekunder.");
+      try {
+        const res = await fetch(`${CFG.supabaseUrl}/functions/v1/send-reminders`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json", apikey: CFG.supabaseAnonKey,
+            ...(CFG.supabaseAnonKey.startsWith("sb_") ? {} : { Authorization: `Bearer ${CFG.supabaseAnonKey}` }),
+          },
+          body: JSON.stringify({ test: true, endpoint: sub.endpoint, delaySeconds: 10 }),
+        });
+        const body = await res.json().catch(() => ({}));
+        const svc = pushService(sub.endpoint);
+        if (res.ok && body.ok) say(`${svc} tog emot testnotisen (svar ${body.status}). Kom den inte fram ligger felet i telefonen: kontrollera Inställningar → Notiser → Växtvakten, och att inget fokusläge som Stör ej är på.`);
+        else if (res.status === 404 && !body.fel) say("Påminnelsefunktionen i Supabase behöver uppdateras för att kunna skicka testnotiser.");
+        else say(`${body.fel || "Servern kunde inte skicka testnotisen."}${body.status ? ` (${svc} svarade ${body.status})` : ""}`);
+      } catch {
+        say("Fick inget svar från servern. Kom notisen ändå fungerar allt. Annars: kontrollera anslutningen och försök igen.");
+      }
+      b.disabled = false;
+    });
   }
 
   function saveIcs() {

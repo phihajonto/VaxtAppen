@@ -1,7 +1,7 @@
 // Växtvakten service worker: visar pushnotiser och gör att appen startar utan nät.
 // Byt versionen här och i index.html (?v=…) när appen ändras.
-const CACHE = "vaxtvakten-v6";
-const SHELL = ["./", "index.html", "styles.css?v=6", "app.js?v=6", "config.js?v=6", "manifest.webmanifest", "icons/icon-192.png"];
+const CACHE = "vaxtvakten-v7";
+const SHELL = ["./", "index.html", "styles.css?v=7", "app.js?v=7", "config.js?v=7", "manifest.webmanifest", "icons/icon-192.png"];
 
 self.addEventListener("install", e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL)).then(() => self.skipWaiting()));
@@ -26,13 +26,16 @@ self.addEventListener("fetch", e => {
 self.addEventListener("push", e => {
   let data = {};
   try { data = e.data ? e.data.json() : {}; } catch { data = { body: e.data && e.data.text() }; }
-  e.waitUntil(self.registration.showNotification(data.title || "Dags att vattna", {
-    body: data.body || "Öppna Växtvakten för att se vilka växter som behöver vatten.",
-    icon: "icons/icon-192.png",
-    badge: "icons/badge-96.png",
-    tag: "vaxtvakten-daily",
-    renotify: true,
-  }));
+  const title = data.title || "Dags att vattna";
+  const body = data.body || "Öppna Växtvakten för att se vilka växter som behöver vatten.";
+  // A push that doesn't end in a visible notification counts as "silent" on iPhone, and after a few
+  // of those iOS quietly turns notifications off for the app. If the full options are rejected,
+  // fall back to the simplest possible notification so one is always shown.
+  e.waitUntil(
+    self.registration.showNotification(title, {
+      body, icon: "icons/icon-192.png", badge: "icons/badge-96.png", tag: data.tag || "vaxtvakten-daily",
+    }).catch(() => self.registration.showNotification(title, { body }))
+  );
 });
 self.addEventListener("notificationclick", e => {
   e.notification.close();
