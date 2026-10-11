@@ -1,0 +1,57 @@
+# Reservjobb för morgonpåminnelsen.
+#
+# Morgonjobbet i Supabase (pg_cron) startar send-reminders kl. 06:00 UTC. Det här jobbet startar
+# samma funktion en halvtimme senare. Har morgonjobbet redan skickat dagens påminnelse gör
+# funktionen ingenting. Har det inte körts skickar funktionen påminnelsen nu i stället, och jobbet
+# markeras som misslyckat så att det syns under Actions att morgonjobbet i Supabase behöver ses över.
+#
+# Obs: GitHub stänger av schemalagda jobb i repon som inte ändrats på 60 dagar. Appen varnar om
+# påminnelsen uteblir, och jobbet kan slås på igen under Actions → Påminnelse (reserv) → Enable.
+name: Påminnelse (reserv)
+
+on:
+  schedule:
+    - cron: "30 6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  remind:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Starta send-reminders om morgonjobbet inte redan gjort det
+        run: |
+          # Adressen och den publika nyckeln läses från appens config.js, så de bara finns på ett ställe.
+          URL=$(grep -o 'supabaseUrl: *"[^"]*"' site/config.js | cut -d'"' -f2)
+          KEY=$(grep -o 'supabaseAnonKey: *"[^"]*"' site/config.js | cut -d'"' -f2)
+          # Den gamla versionen av send-reminders kan inte se att dagens påminnelse redan är gjord och
+          # skulle skicka en notis till. Fortsätt bara om den nya versionen (med reminder-status) finns.
+          STATUS=$(curl -sS -o status.json -w '%{http_code}' --max-time 30 --retry 3 --retry-all-errors \
+            -X POST "$URL/functions/v1/reminder-status" \
+            -H "Content-Type: application/json" -H "apikey: $KEY" -H "Authorization: Bearer $KEY" -d '{}')
+          if [ "$STATUS" != "200" ]; then
+            echo "::warning::reminder-status svarade $STATUS. Den nya versionen av funktionerna är inte driftsatt, så reservjobbet gör ingenting idag. Lägg in SUPABASE_ACCESS_TOKEN och kör Driftsätt Supabase-funktioner."
+            exit 1
+          fi
+          echo "Status före: $(cat status.json)"
+          HTTP=$(curl -sS -o resp.json -w '%{http_code}' --max-time 60 --retry 3 --retry-all-errors \
+            -X POST "$URL/functions/v1/send-reminders" \
+            -H "Content-Type: application/json" -H "apikey: $KEY" -H "Authorization: Bearer $KEY" \
+            -d '{"source":"github"}')
+          echo "HTTP $HTTP"; cat resp.json; echo
+          if [ "$HTTP" != "200" ]; then
+            echo "::error::send-reminders svarade $HTTP: $(cat resp.json)"
+            exit 1
+          fi
+          if grep -Eq '"skipped" *: *true' resp.json; then
+            echo "Morgonjobbet i Supabase har redan skickat dagens påminnelse. Allt fungerar."
+          elif grep -Eq '"source" *: *"github"' resp.json; then
+            echo "::error::Morgonjobbet i Supabase körde inte idag. Reservjobbet skickade påminnelsen i stället. Kör supabase/2-paminnelse-varje-morgon.sql i Supabase → SQL Editor."
+            exit 1
+          else
+            echo "::warning::Oväntat svar från send-reminders. Kontrollera att den nya versionen är driftsatt."
+            exit 1
+          fi
